@@ -31,8 +31,8 @@ Colab will load the notebook and run it in its own environment.
 
 
 Alternatively, you can directly open from GitHub using URL trick (very fast). Just replace `github.com` with `colab.research.google.com/github`.
-For instance, if your notebook is at `https://github.com/marchioa/security/notebooks/notebook.ipynb`, change the URL to
-`https://colab.research.google.com/github/marchioa/security/notebooks/notebook.ipynb`.
+For instance, if your notebook is at `https://github.com/user/repo/blob/branch/notebook.ipynb`, change the URL to
+`https://colab.research.google.com/github/user/repo/blob/branch/notebook.ipynb`.
 
 
 #### Install required packages
