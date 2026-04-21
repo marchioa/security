@@ -58,7 +58,7 @@ class Bits:
         return f'Bits("{str(self)}")'
 
     def __format__(self, format_spec: str) -> str:
-        return format(self.__str__(), format_spec)
+        return format(str(self), format_spec)
 
     def __iter__(self) -> Iterator[bool]:
         return iter(self.bits)
