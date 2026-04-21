@@ -1,8 +1,20 @@
+from __future__ import annotations
+from enum import Enum
 from itertools import zip_longest
+from typing import Iterator, Sequence, overload
+
+class Endianness(Enum):
+    BIG = 'big'
+    LITTLE = 'little'
 
 class Bits:
 
-    def __init__(self, data=None, endianness='big', length=None):
+    def __init__(
+            self,
+            data: None | Bits | bytes | int | str | list | tuple = None,
+            endianness: str | Endianness = 'big',
+            length: int | None = None
+        ) -> None:
         """ Initialize the Bits object from bytes, an integer, or a list of
         booleans."""
         if data is None:
@@ -36,55 +48,61 @@ class Bits:
         if length is not None:
             self.bits = self.bits[:length]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.bits)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return ''.join(f'{bit:0b}' for bit in self.bits)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Bits("{str(self)}")'
 
-    def __format__(self, format_spec):
+    def __format__(self, format_spec: str) -> str:
         return format(self.__str__(), format_spec)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[bool]:
         return iter(self.bits)
 
-    def __getitem__(self, index):
-        bits = self.bits[index]
-        return Bits(bits) if isinstance(index, slice) else bits
-
-    def __setitem__(self, index, value):
+    @overload
+    def __getitem__(self, index: int) -> bool: ...
+    @overload
+    def __getitem__(self, index: slice) -> Bits: ...
+    def __getitem__(self, index: int | slice) -> bool | Bits:
         if isinstance(index, slice):
-            self.bits[index] = [self._coerce_bit(b) for b in value]
-        else:
-            self.bits[index] = self._coerce_bit(value)
+            return Bits(self.bits[index])
+        return self.bits[index]
 
-    def __xor__(self, other):
-        self._check_operand(other)
+    def __setitem__(
+            self,
+            index: int | slice,
+            value: bool | int | Sequence[bool | int]
+        ) -> None:
+        if isinstance(index, slice):
+            self.bits[index] = [
+                self._coerce_bit(b) for b in value]  # type: ignore[union-attr]
+        else:
+            self.bits[index] = self._coerce_bit(value)  # type: ignore[arg-type]
+
+    def __xor__(self, other: Bits) -> Bits:
         bits = [a ^ b for a, b in zip_longest(self, other, fillvalue=False)]
         return Bits(bits)
 
-    def __and__(self, other):
-        self._check_operand(other)
+    def __and__(self, other: Bits) -> Bits:
         bits = [a and b for a, b in zip_longest(self, other, fillvalue=False)]
         return Bits(bits)
 
-    def __or__(self, other):
-        self._check_operand(other)
+    def __or__(self, other: Bits) -> Bits:
         bits = [a or b for a, b in zip_longest(self, other, fillvalue=False)]
         return Bits(bits)
 
-    def __invert__(self):
+    def __invert__(self) -> Bits:
         return Bits([not b for b in self.bits])
 
-    def __add__(self, other):
+    def __add__(self, other: Bits) -> Bits:
         """Concatenate two Bits objects."""
-        self._check_operand(other)
         return Bits(self.bits + other.bits)
 
-    def __mul__(self, scalar):
+    def __mul__(self, scalar: int) -> Bits:
         """Replicate the Bits object by a scalar value,
         similar to list multiplication."""
         if not isinstance(scalar, int) or scalar < 0:
@@ -93,65 +111,86 @@ class Bits:
 
     __rmul__ = __mul__
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """Check equality between two Bits objects."""
         if not isinstance(other, Bits):
             return NotImplemented
         return self.bits == other.bits
 
-    def __rshift__(self, scalar):
+    def __rshift__(self, scalar: int) -> Bits:
         """Right shift the Bits object by a scalar value."""
         if not isinstance(scalar, int) or scalar < 0:
             raise ValueError("Shift value must be a non-negative integer.")
         return Bits([False] * scalar + self.bits)
 
-    def __lshift__(self, scalar):
+    def __lshift__(self, scalar: int) -> Bits:
         """Left shift the Bits object by a scalar value."""
         if not isinstance(scalar, int) or scalar < 0:
             raise ValueError("Shift value must be a non-negative integer.")
         return Bits(self.bits[scalar:])
 
-    def parity_bit(self):
+    def parity_bit(self) -> bool:
         """Compute the parity bit (even parity). """
         return sum(self.bits) % 2 == 1
 
-    def append(self, bit):
+    def append(self, bit: bool | int) -> None:
         """Append a single bit (boolean or 0/1 integer)."""
         self.bits.append(self._coerce_bit(bit))
 
-    def pop(self, index=-1):
-        """Remove and return a bit at the given index (default is the last bit)."""
+    def pop(self, index: int = -1) -> bool:
+        """Remove and return a bit at the given index (default: last bit)."""
         if not self.bits:
             raise IndexError("pop from empty Bits")
         return self.bits.pop(index)
 
+    def insert(self, index: int, bit: bool | int) -> None:
+        """Insert a single bit (boolean or 0/1 integer) at the given index."""
+        self.bits.insert(index, self._coerce_bit(bit))
+
     @staticmethod
-    def _byte_to_bits(byte, endianness='big'):
+    def _coerce_endianness(endianness: str | Endianness) -> Endianness:
+        if isinstance(endianness, Endianness):
+            return endianness
+        elif endianness in ('big', 'little'):
+            return Endianness(endianness)
+        else:
+            msg = f"Unsupported endianness '{endianness}'."
+            msg+= " Use 'big' or 'little'."
+            raise ValueError(msg)
+
+    @staticmethod
+    def _byte_to_bits(
+            byte: int,
+            endianness: Endianness = Endianness.BIG
+        ) -> list[bool]:
         """ Convert a single byte into a sequence of booleans """
-        Bits._check_endianness(endianness)
         bits = list(bool(byte & (1 << i)) for i in range(8))
-        if endianness == 'big':
+        if endianness == Endianness.BIG:
             bits = bits[::-1]
         return bits
 
     @classmethod
-    def from_bytes(cls, data, endianness='big'):
+    def from_bytes(
+            cls,
+            data: bytes,
+            endianness: str | Endianness = 'big'
+        ) -> Bits:
         """ Create a Bits object from bytes """
-        cls._check_endianness(endianness)
+        end = cls._coerce_endianness(endianness)
         bits = list(
             bit for byte in data
-            for bit in cls._byte_to_bits(byte, endianness=endianness)
+            for bit in cls._byte_to_bits(byte, endianness=end)
         )
         return cls(bits)
 
-    def to_bytes(self, endianness='big'):
+    def to_bytes(self, endianness: str | Endianness = 'big') -> bytes:
         """Convert Bits to a bytes string."""
-        self._check_endianness(endianness)
+        end = self._coerce_endianness(endianness)
         bytes_list = []
         for i in range(1 + (len(self.bits) - 1) // 8):
             byte = list(self.bits[8*i:8*(i+1)])  # select 8 bits at a time
             byte += [False] * (8 - len(byte))  # zero padding
-            if endianness == 'big':
+            if end == Endianness.BIG:
                 byte = byte[::-1]  # invert bit order
             # turn 8 bits into a byte
             byte = sum(bit * 2**i for i, bit in enumerate(byte))
@@ -159,27 +198,36 @@ class Bits:
         return bytes(bytes_list)  # turn list of bytes into a bytes object
 
     @classmethod
-    def from_int(cls, value, length=None, endianness='big'):
+    def from_int(
+            cls,
+            value: int,
+            length: int | None = None,
+            endianness: str | Endianness = 'big'
+        ) -> Bits:
         """ Create a Bits object from an integer """
-        cls._check_endianness(endianness)
+        end = cls._coerce_endianness(endianness)
         if length is None:
             length = max(value.bit_length(), 1)
         bits = list(bool((value >> i) & 1)
                     for i in range(max(length, value.bit_length())))
-        if endianness == 'big':
+        if end == Endianness.BIG:
             bits = bits[::-1]
         return cls(bits[:length])
 
-    def to_int(self, endianness='big'):
+    def to_int(self, endianness: str | Endianness = 'big') -> int:
         """Convert Bits to an integer."""
-        self._check_endianness(endianness)
-        integer = sum(bit << (i if endianness == 'little'
+        end = self._coerce_endianness(endianness)
+        integer = sum(bit << (i if end == Endianness.LITTLE
                               else len(self.bits) - 1 - i)
                               for i, bit in enumerate(self.bits))
         return integer
 
     @classmethod
-    def from_sparse(cls, sparse, length=None):
+    def from_sparse(
+            cls,
+            sparse: set[int] | list[int],
+            length: int | None = None
+        ) -> Bits:
         """ Create a Bits object from a set of indexes of non-zero bits """
         sparse = set(sparse)
         if length is None:
@@ -187,38 +235,25 @@ class Bits:
         bits = [i in sparse for i in range(length)]
         return cls(bits)
 
-    def to_sparse(self):
+    def to_sparse(self) -> set[int]:
         """Convert Bits to set of indexes of non-zero bits."""
         sparse = set(i for i, bit in enumerate(self.bits) if bit)
         return sparse
 
     @classmethod
-    def from_str(cls, value):
+    def from_str(cls, value: str) -> Bits:
         """ Create a Bits object from a string """
         bits = list(bool(int(bit)) for bit in value)
         return cls(bits)
 
-    def copy(self):
+    def copy(self) -> Bits:
         return Bits(self.bits[:])
 
     @staticmethod
-    def _check_endianness(endianness):
-        if not (endianness in ('big', 'little')):
-            _str = f"Unsupported {endianness} endianness."
-            _str+= "Use 'big' or 'little'."
-            raise ValueError(_str)
-
-    @staticmethod
-    def _coerce_bit(bit) -> bool:
+    def _coerce_bit(bit: bool | int) -> bool:
         """Convert a bit value to bool, accepting booleans and 0/1 integers."""
         if isinstance(bit, bool):
             return bit
         if isinstance(bit, int):
             return bool(bit)
         raise ValueError("Bits must be booleans or 0/1 integers.")
-
-    @staticmethod
-    def _check_operand(other):
-        if not isinstance(other, Bits):
-            raise ValueError("Operand must be a Bits instance.")
-
