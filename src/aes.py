@@ -4,10 +4,13 @@ from typing import Iterator
 
 from scipy.linalg import circulant
 
-class AES:
+from blockcipher import BlockCipher
+
+class AES(BlockCipher):
+
     block_size = 16
-    key_sizes = (16, 24, 32)
-    _num_rounds = (10, 12, 14)
+    KEY_SIZES = (16, 24, 32)
+    NUM_ROUNDS = (10, 12, 14)
 
     SBOX = bytes.fromhex(
         # 0 1 2 3 4 5 6 7 8 9 a b c d e f
@@ -37,17 +40,14 @@ class AES:
         b'\x1b\x00\x00\x00', b'\x36\x00\x00\x00',
     )
 
-    def __init__(self, key):
-        if not isinstance(key, bytes):
-            raise ValueError(f'Unsupported type {type(key).__name__} for key')
+    def __init__(self, key: bytes, iv: bytes | None = None, mode: str = 'ECB'):
+        super().__init__(key, iv or bytes(self.block_size), mode)
         key_size = len(key)
-        if not (key_size in self.key_sizes):
+        if not (key_size in self.KEY_SIZES):
             msg = f'Unsupported key length {key_size}B ({8*key_size}bit)'
             raise ValueError(msg)
-
         self.key_size = key_size
-        self.key = key
-        self.num_rounds = self._num_rounds[self.key_sizes.index(key_size)]
+        self.num_rounds = self.NUM_ROUNDS[self.KEY_SIZES.index(key_size)]
 
     @staticmethod
     def add_round_key(state: bytes, round_key: bytes) -> bytes:
@@ -128,25 +128,6 @@ class AES:
         # first row of MixColumn matrix
         col = np.array([0x0e, 0x09, 0x0d, 0x0b], dtype=np.ubyte)
         return AES._mix_column(state, col)
-
-    # @staticmethod
-    # def mix_column(state):
-    #     # first row of MixColumn matrix
-    #     row = np.array([0x02, 0x03, 0x01, 0x01])
-    #     n = len(row)
-    #     X = np.array(list(state), dtype=np.ubyte).reshape(-1, n).T
-    #     Y = np.zeros(X.shape, np.ubyte)
-    #     for i, j in product(range(n), range(X.shape[-1])):
-    #         for k, (q, x) in enumerate(zip(np.roll(row, i), X[:, j])):
-    #             if q == 0x01:
-    #                 Y[i, j]^= x
-    #             elif q == 0x02:
-    #                 Y[i, j]^= AES.mul_by_x(x)
-    #             elif q == 0x03:
-    #                 Y[i, j]^= x ^ AES.mul_by_x(x)
-    #             else:
-    #                 raise ValueError(f'Unexpected value {q}')
-    #     return bytes(byte for byte in Y.T.flatten())
 
     @staticmethod
     def round(state: bytes , round_key: bytes) -> bytes:
